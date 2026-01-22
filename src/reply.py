@@ -523,7 +523,7 @@ def __equipment_details(text: str, db, user_id: str) -> TextMessage:
                         response_text += "暫無最新監測指標。\n"
                     cursor.execute(
                         """
-                        SELECT TOP 3 detected_anomaly_type, severity_level, created_time, message
+                        SELECT TOP 3 detected_anomaly_type, severity_level, created_time
                         FROM alert_history
                         WHERE equipment_id = ? AND is_resolved = 0
                         ORDER BY created_time DESC;
@@ -532,7 +532,7 @@ def __equipment_details(text: str, db, user_id: str) -> TextMessage:
                     alerts = cursor.fetchall()
                     if alerts:
                         response_text += "\n⚠️ 未解決的警報：\n"
-                        for alert_t, severity_level, created_time, _ in alerts:  # msg_content not used
+                        for alert_t, severity_level, created_time in alerts:
                             sev_emoji = {
                                 "warning": "⚠️", "critical": "🔴", "emergency": "🚨"
                             }.get(severity_level, "ℹ️")

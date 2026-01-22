@@ -269,7 +269,6 @@ class Database:
                     [resolved_by] NVARCHAR(255) NULL,
                     [resolution_notes] NVARCHAR(MAX) NULL
                 """
-                # 此表欄位原有message欄位，因純粹為重複其他欄位內容，不須保留，所以移除
                 self._create_table_if_not_exists(
                     init_cur,
                     "alert_history",
