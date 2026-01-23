@@ -1,11 +1,8 @@
-# src/routes/main.py
-
-from flask import request, abort, render_template
+from flask import request, abort
 from . import main_bp
 from linebot.v3.exceptions import InvalidSignatureError
 import logging
 
-# This will be initialized in app.py
 handler = None
 logger = logging.getLogger(__name__)
 
@@ -36,4 +33,4 @@ def callback():
 
 @main_bp.route("/")
 def index():
-    return render_template("index.html")
+    return "OK"

@@ -1,12 +1,10 @@
-﻿import logging
+﻿﻿import logging
 import pathlib
 import sys
 
 import pandas as pd
 import pyodbc
 
-# Allow running this module directly (e.g., `python src/initial_data.py`) by
-# ensuring the package root is on sys.path and __package__ is set.
 if __package__ is None or __package__ == "":
     sys.path.append(str(pathlib.Path(__file__).resolve().parent.parent))
     __package__ = "src"
@@ -14,8 +12,6 @@ if __package__ is None or __package__ == "":
 from .database import db
 
 
-# --- 1. 設定日誌記錄 ---
-# 設定日誌系統的基本配置，方便追蹤腳本執行狀況與排查問題。
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
@@ -23,14 +19,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-# --- 2. 設定 Excel 檔案路徑 ---
-# 使用跨平台路徑，避免硬編碼 Windows 反斜線。
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
 EXCEL_FILE_PATH = PROJECT_ROOT / "data" / "simulated_data (1).xlsx"
 
 
 def _parse_excel_datetime(value):
-    """Convert Excel cell to Python datetime or None."""
+    """將 Excel 儲存格轉為 Python datetime 或 None。"""
     if value is None:
         return None
     ts = pd.to_datetime(value, errors='coerce')
@@ -39,7 +33,6 @@ def _parse_excel_datetime(value):
     return ts.to_pydatetime()
 
 
-# --- 4. 完整的表格匯入設定 ---
 """
 這是此腳本的設定驅動核心。
 將每個「Excel工作表 -> 資料庫表格」的對應關係及轉換邏輯都定義為一個字典。
@@ -109,7 +102,7 @@ TABLE_CONFIGS = [
             float(row.get('warning_max')) if pd.notna(row.get('warning_max')) else None,
             float(row.get('critical_min')) if pd.notna(row.get('critical_min')) else None,
             float(row.get('critical_max')) if pd.notna(row.get('critical_max')) else None,
-            str(row.get('emergency_op')) if pd.notna(row.get('emergency_op')) else None,  # emergency_op 可能是 ">" 或 "<"
+            str(row.get('emergency_op')) if pd.notna(row.get('emergency_op')) else None,
             float(row.get('emergency_min')) if pd.notna(row.get('emergency_min')) else None,
             float(row.get('emergency_max')) if pd.notna(row.get('emergency_max')) else None,
             pd.to_datetime(row.get('last_updated')) if pd.notna(row.get('last_updated')) else None
@@ -135,121 +128,102 @@ TABLE_CONFIGS = [
             str(row.get('severity_level')) if pd.notna(row.get('severity_level')) else None
         )
     },
-    {
-        "excel_sheet_name": "stats_operational_monthly",
-        "sql_table_name": "stats_operational_monthly",
-        "sql_columns": ["equipment_id", "year", "month",
-                        "total_operation_hrs", "downtime_sec",
-                        "downtime_rate_percent", "notes"],
-        "transform_row_data": lambda row: (
-            str(row.get('equipment_id')), int(row.get('year')), int(row.get('month')),
-            int(row.get('total_operation_hrs')) if pd.notna(row.get('total_operation_hrs')) else None,
-            int(row.get('downtime_sec')) if pd.notna(row.get('downtime_sec')) else None,
-            str(row.get('downtime_rate_percent')) if pd.notna(row.get('downtime_rate_percent')) else None,
-            str(row.get('notes')) if pd.notna(row.get('notes')) else None
-        )
-    },
-    {
-        "excel_sheet_name": "stats_operational_quarterly",
-        "sql_table_name": "stats_operational_quarterly",
-        "sql_columns": ["equipment_id", "year", "quarter",
-                        "total_operation_hrs", "downtime_sec",
-                        "downtime_rate_percent", "notes"],
-        "transform_row_data": lambda row: (
-            str(row.get('equipment_id')), row.get('year'), row.get('quarter'),
-            int(row.get('total_operation_hrs')) if pd.notna(row.get('total_operation_hrs')) else None,
-            int(row.get('downtime_sec')) if pd.notna(row.get('downtime_sec')) else None,
-            str(row.get('downtime_rate_percent')) if pd.notna(row.get('downtime_rate_percent')) else None,
-            str(row.get('notes')) if pd.notna(row.get('notes')) else None
-        )
-    },
-    {
-        "excel_sheet_name": "stats_operational_yearly",
-        "sql_table_name": "stats_operational_yearly",
-        "sql_columns": ["equipment_id", "year", "total_operation_hrs",
-                        "downtime_sec", "downtime_rate_percent",
-                        "notes"],
-        "transform_row_data": lambda row: (
-            str(row.get('equipment_id')), row.get('year'),
-            int(row.get('total_operation_hrs')) if pd.notna(row.get('total_operation_hrs')) else None,
-            int(row.get('downtime_sec')) if pd.notna(row.get('downtime_sec')) else None,
-            str(row.get('downtime_rate_percent')) if pd.notna(row.get('downtime_rate_percent')) else None,
-            str(row.get('notes')) if pd.notna(row.get('notes')) else None
-        )
-    },
-    {
-        "excel_sheet_name": "stats_abnormal_monthly",
-        "sql_table_name": "stats_abnormal_monthly",
-        "sql_columns": ["equipment_id", "year", "month",
-                        "detected_anomaly_type", "total_operation_hrs", "downtime_sec",
-                        "downtime_rate_percent", "notes"],
-        "transform_row_data": lambda row: (
-            str(row.get('equipment_id')), int(row.get('year')), int(row.get('month')),
-            str(row.get('detected_anomaly_type')) if row.get('detected_anomaly_type') else 'default_anomaly_type',
-            int(row.get('total_operation_hrs')) if pd.notna(row.get('total_operation_hrs')) else None,
-            int(row.get('downtime_sec')) if pd.notna(row.get('downtime_sec')) else None,
-            float(row.get('downtime_rate_percent')) if pd.notna(row.get('downtime_rate_percent')) else None,
-            str(row.get('notes')) if pd.notna(row.get('notes')) else None
-        )
-    },
-    {
-        "excel_sheet_name": "stats_abnormal_quarterly",
-        "sql_table_name": "stats_abnormal_quarterly",
-        "sql_columns": ["equipment_id", "year", "quarter",
-                        "detected_anomaly_type", "total_operation_hrs", "downtime_sec",
-                        "downtime_rate_percent", "notes"],
-        "transform_row_data": lambda row: (
-            str(row.get('equipment_id')), row.get('year'), row.get('quarter'),
-            str(row.get('detected_anomaly_type')) if row.get('detected_anomaly_type') else 'default_anomaly_type',
-            int(row.get('total_operation_hrs')) if pd.notna(row.get('total_operation_hrs')) else None,
-            int(row.get('downtime_sec')) if pd.notna(row.get('downtime_sec')) else None,
-            str(row.get('downtime_rate_percent')) if pd.notna(row.get('downtime_rate_percent')) else None,
-            str(row.get('notes')) if pd.notna(row.get('notes')) else None
-        )
-    },
-    {
-        "excel_sheet_name": "stats_abnormal_yearly",
-        "sql_table_name": "stats_abnormal_yearly",
-        "sql_columns": ["equipment_id", "year", "detected_anomaly_type",
-                        "total_operation_hrs", "downtime_sec", "downtime_rate_percent",
-                        "notes"],
-        "transform_row_data": lambda row: (
-            str(row.get('equipment_id')), row.get('year'),
-            str(row.get('detected_anomaly_type')) if row.get('detected_anomaly_type') else 'default_anomaly_type',
-            int(row.get('total_operation_hrs')) if pd.notna(row.get('total_operation_hrs')) else None,
-            int(row.get('downtime_sec')) if pd.notna(row.get('downtime_sec')) else None,
-            str(row.get('downtime_rate_percent')) if pd.notna(row.get('downtime_rate_percent')) else None,
-            str(row.get('notes')) if pd.notna(row.get('notes')) else None
-        )
-    },
-    {
-        "excel_sheet_name": "user_preferences",
-        "sql_table_name": "user_preferences",
-        "sql_columns": [
-            "user_id",
-            "language",
-            "role",
-            "is_admin",
-            "responsible_area",
-            "created_at",
-            "display_name",
-            "last_active",
-        ],
-        "transform_row_data": lambda row: (
-            str(row.get('user_id')),
-            str(row.get('language')) if pd.notna(row.get('language')) else None,
-            str(row.get('role')) if pd.notna(row.get('role')) else None,
-            int(row.get('is_admin')) if pd.notna(row.get('is_admin')) else None,
-            str(row.get('responsible_area')) if pd.notna(row.get('responsible_area')) else None,
-            _parse_excel_datetime(row.get('created_at')),
-            str(row.get('display_name')) if pd.notna(row.get('display_name')) else None,
-            _parse_excel_datetime(row.get('last_active'))
-        )
-    }
 ]
 
+"""
+統計表改由程式計算與寫入，暫停匯入。
+若要恢復匯入，可將下列設定加入 TABLE_CONFIGS：
 
-# 最終的匯入主程式
+{
+    "excel_sheet_name": "stats_operational_monthly",
+    "sql_table_name": "stats_operational_monthly",
+    "sql_columns": ["equipment_id", "year", "month",
+                    "total_operation_hrs", "downtime_sec",
+                    "downtime_rate_percent", "notes"],
+    "transform_row_data": lambda row: (
+        str(row.get('equipment_id')), int(row.get('year')), int(row.get('month')),
+        int(row.get('total_operation_hrs')) if pd.notna(row.get('total_operation_hrs')) else None,
+        int(row.get('downtime_sec')) if pd.notna(row.get('downtime_sec')) else None,
+        str(row.get('downtime_rate_percent')) if pd.notna(row.get('downtime_rate_percent')) else None,
+        str(row.get('notes')) if pd.notna(row.get('notes')) else None
+    )
+},
+{
+    "excel_sheet_name": "stats_operational_quarterly",
+    "sql_table_name": "stats_operational_quarterly",
+    "sql_columns": ["equipment_id", "year", "quarter",
+                    "total_operation_hrs", "downtime_sec",
+                    "downtime_rate_percent", "notes"],
+    "transform_row_data": lambda row: (
+        str(row.get('equipment_id')), row.get('year'), row.get('quarter'),
+        int(row.get('total_operation_hrs')) if pd.notna(row.get('total_operation_hrs')) else None,
+        int(row.get('downtime_sec')) if pd.notna(row.get('downtime_sec')) else None,
+        str(row.get('downtime_rate_percent')) if pd.notna(row.get('downtime_rate_percent')) else None,
+        str(row.get('notes')) if pd.notna(row.get('notes')) else None
+    )
+},
+{
+    "excel_sheet_name": "stats_operational_yearly",
+    "sql_table_name": "stats_operational_yearly",
+    "sql_columns": ["equipment_id", "year", "total_operation_hrs",
+                    "downtime_sec", "downtime_rate_percent",
+                    "notes"],
+    "transform_row_data": lambda row: (
+        str(row.get('equipment_id')), row.get('year'),
+        int(row.get('total_operation_hrs')) if pd.notna(row.get('total_operation_hrs')) else None,
+        int(row.get('downtime_sec')) if pd.notna(row.get('downtime_sec')) else None,
+        str(row.get('downtime_rate_percent')) if pd.notna(row.get('downtime_rate_percent')) else None,
+        str(row.get('notes')) if pd.notna(row.get('notes')) else None
+    )
+},
+{
+    "excel_sheet_name": "stats_abnormal_monthly",
+    "sql_table_name": "stats_abnormal_monthly",
+    "sql_columns": ["equipment_id", "year", "month",
+                    "detected_anomaly_type", "total_operation_hrs", "downtime_sec",
+                    "downtime_rate_percent", "notes"],
+    "transform_row_data": lambda row: (
+        str(row.get('equipment_id')), int(row.get('year')), int(row.get('month')),
+        str(row.get('detected_anomaly_type')) if row.get('detected_anomaly_type') else 'default_anomaly_type',
+        int(row.get('total_operation_hrs')) if pd.notna(row.get('total_operation_hrs')) else None,
+        int(row.get('downtime_sec')) if pd.notna(row.get('downtime_sec')) else None,
+        float(row.get('downtime_rate_percent')) if pd.notna(row.get('downtime_rate_percent')) else None,
+        str(row.get('notes')) if pd.notna(row.get('notes')) else None
+    )
+},
+{
+    "excel_sheet_name": "stats_abnormal_quarterly",
+    "sql_table_name": "stats_abnormal_quarterly",
+    "sql_columns": ["equipment_id", "year", "quarter",
+                    "detected_anomaly_type", "total_operation_hrs", "downtime_sec",
+                    "downtime_rate_percent", "notes"],
+    "transform_row_data": lambda row: (
+        str(row.get('equipment_id')), row.get('year'), row.get('quarter'),
+        str(row.get('detected_anomaly_type')) if row.get('detected_anomaly_type') else 'default_anomaly_type',
+        int(row.get('total_operation_hrs')) if pd.notna(row.get('total_operation_hrs')) else None,
+        int(row.get('downtime_sec')) if pd.notna(row.get('downtime_sec')) else None,
+        str(row.get('downtime_rate_percent')) if pd.notna(row.get('downtime_rate_percent')) else None,
+        str(row.get('notes')) if pd.notna(row.get('notes')) else None
+    )
+},
+{
+    "excel_sheet_name": "stats_abnormal_yearly",
+    "sql_table_name": "stats_abnormal_yearly",
+    "sql_columns": ["equipment_id", "year", "detected_anomaly_type",
+                    "total_operation_hrs", "downtime_sec", "downtime_rate_percent",
+                    "notes"],
+    "transform_row_data": lambda row: (
+        str(row.get('equipment_id')), row.get('year'),
+        str(row.get('detected_anomaly_type')) if row.get('detected_anomaly_type') else 'default_anomaly_type',
+        int(row.get('total_operation_hrs')) if pd.notna(row.get('total_operation_hrs')) else None,
+        int(row.get('downtime_sec')) if pd.notna(row.get('downtime_sec')) else None,
+        str(row.get('downtime_rate_percent')) if pd.notna(row.get('downtime_rate_percent')) else None,
+        str(row.get('notes')) if pd.notna(row.get('notes')) else None
+    )
+}
+"""
+
+
 def import_data_from_excel():
     """從指定的 Excel 檔案讀取數據，並使用高效能的批次插入將其匯入到資料庫中。"""
     try:
@@ -309,7 +283,6 @@ def import_data_from_excel():
                             f"'{sql_table_name}'..."
                         )
                         try:
-                            # 直接執行插入，因為 database.py 中的表格結構現在是正確的
                             cursor.executemany(insert_sql, data_to_insert)
                             conn.commit()
                             logger.info(
@@ -328,16 +301,19 @@ def import_data_from_excel():
                     )
                     continue
 
+        try:
+            if db is None:
+                logger.warning("資料庫尚未初始化，略過統計表更新。")
+            else:
+                db.refresh_stats()
+        except Exception as e:
+            logger.error(f"更新統計表失敗: {e}")
+
     except Exception as e:
         logger.error(f"執行 Excel 匯入腳本時發生未知錯誤: {e}")
 
 
 if __name__ == '__main__':
-    """
-    使用 `if __name__ == '__main__':` 是一個 Python 的標準做法。
-    它確保 `import_data_from_excel()` 只有在腳本被直接執行時才會被調用，
-    而不是在它被其他 Python 腳本匯入時。這讓腳本既可以獨立運行，也可以被當作模組使用。
-    """
     logger.info("腳本啟動：開始匯入初始資料到資料庫。")
     import_data_from_excel()
     logger.info("所有資料匯入任務完成。")

@@ -1,4 +1,3 @@
-# src/linebot_connect.py
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
@@ -13,25 +12,21 @@ if not channel_secret:
     raise ValueError("LINE_CHANNEL_SECRET not set")
 
 handler = WebhookHandler(channel_secret)
-
-# Initialize a thread pool with a limited number of workers
-# Adjust max_workers based on your server's capacity
 executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="LineBotWorker")
 
 
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_message(event):
     """
-    Handles incoming text messages from LINE.
-    Delegates the processing to a background thread pool to avoid webhook timeouts
-    and prevent resource exhaustion.
+    處理 LINE 的文字訊息事件。
+    將訊息處理交由背景執行緒池，以避免 webhook 逾時與資源耗盡。
     """
     try:
         executor.submit(process_message_in_background, event)
     except Exception as e:
-        logger.error(f"Failed to submit task to thread pool: {e}")
+        logger.error(f"提交任務到執行緒池失敗: {e}")
 
 
 def get_handler():
-    """Returns the configured WebhookHandler instance."""
+    """回傳已設定的 WebhookHandler 實例。"""
     return handler

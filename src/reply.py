@@ -57,11 +57,6 @@ def __guide() -> TextMessage:
                 text="查看半導體設備的狀態和異常警告。",
                 actions=[MessageAction(label="查看設備狀態", text="設備狀態")],
             ),
-            CarouselColumn(
-                title="語言設定",
-                text="輸入 'language:語言代碼' 更改語言。\n目前支援：\nlanguage:zh-Hant (繁中)",
-                actions=[MessageAction(label="設定為繁體中文", text="language:zh-Hant")],
-            ),
         ]
     )
     reply_message_obj = TemplateMessage(
@@ -74,52 +69,18 @@ def __about() -> TextMessage:
     """顯示關於訊息"""
     reply_message_obj = TextMessage(
             text=(
-                "這是一個整合 LINE Bot 與 Ollama 的智能助理，"
-                "可以回答您的技術問題、監控半導體設備狀態並展示。"
+                "這是一個智慧工廠 Line Bot 助理，"
+                "可以協助您監控半導體設備狀態、接收警報通知並查詢統計報表。"
                 "您可以輸入 'help' 查看更多功能。"
             )
         )
     return reply_message_obj
 
 
-def __language() -> TextMessage:
-    reply_message_obj = TextMessage(
-            text=(
-                "您可以通過輸入以下命令設置語言：\n\n"
-                "language:zh-Hant - 繁體中文"
-            )
-        )
-    return reply_message_obj
-
-
-def __set_language(text: str, db, user_id) -> TextMessage:
-    """設置語言"""
-    try:
-        lang_code_input = text.split(":", 1)[1].strip().lower()
-        valid_langs = {"zh-hant": "zh-Hant", "zh": "zh-Hant"}
-        lang_to_set = valid_langs.get(lang_code_input)
-
-        if lang_to_set:
-            if db.set_user_preference(user_id, language=lang_to_set):
-                confirmation_map = {"zh-Hant": "語言已切換至 繁體中文"}
-                reply_message_obj = TextMessage(
-                    text=confirmation_map.get(lang_to_set, f"語言已設定為 {lang_to_set}")
-                )
-            else:
-                reply_message_obj = TextMessage(text="語言設定失敗，請稍後再試。")
-        else:
-            reply_message_obj = TextMessage(
-                text="不支援的語言代碼。目前支援：zh-Hant (繁體中文)"
-            )
-    except IndexError:
-        reply_message_obj = TextMessage(text="格式錯誤。請使用: language:zh-Hant")
-    return reply_message_obj
-
-
 def __equipment_status(db) -> TextMessage:
     """顯示設備狀態訊息"""
     try:
-        with db._get_connection() as conn:  # 使用 MS SQL Server 連線
+        with db._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
@@ -204,12 +165,11 @@ def __equipment_status(db) -> TextMessage:
 
 def __subscribe_equipment(text, db, user_id: str) -> TextMessage:
     """訂閱設備"""
-    # Improved splitting logic: split by any whitespace
     parts = text.split(maxsplit=1)
 
-    if len(parts) < 2 or not parts[1].strip():  # 指令為 "訂閱設備" (無參數)
+    if len(parts) < 2 or not parts[1].strip():
         try:
-            with db._get_connection() as conn:  # 使用 MS SQL Server 連線
+            with db._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     "SELECT equipment_id, name, equipment_type, location "
@@ -224,7 +184,7 @@ def __subscribe_equipment(text, db, user_id: str) -> TextMessage:
                         "請選擇要訂閱的設備 (或輸入 '訂閱設備 [設備ID]'):\n\n"
                     )
                     response_text_list = ""
-                    for eq_id, name_db, equipment_type, loc in equipments[:13]:  # LINE QuickReply 最多13個
+                    for eq_id, name_db, equipment_type, loc in equipments[:13]:  # LINE 快速回覆（QuickReply）最多 13 個
                         type_name = {
                            "dicer": "切割機"
                         }.get(equipment_type, equipment_type)
@@ -256,10 +216,10 @@ def __subscribe_equipment(text, db, user_id: str) -> TextMessage:
         except Exception as e:
             logger.error(f"處理訂閱設備列表時發生未知錯誤: {e}")
             reply_message_obj = TextMessage(text="系統忙碌中，請稍候再試。")
-    else:  # 指令為 "訂閱設備 [ID]"
-        equipment_id_to_subscribe = parts[1].strip().upper()  # ID 通常大寫
+    else:
+        equipment_id_to_subscribe = parts[1].strip().upper()
         try:
-            with db._get_connection() as conn:  # 使用 MS SQL Server 連線
+            with db._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     "SELECT name FROM equipment WHERE equipment_id = ?;",
@@ -312,9 +272,9 @@ def __subscribe_equipment(text, db, user_id: str) -> TextMessage:
 
 def __unsubscribe_equipment(text: str, db, user_id: str) -> TextMessage:
     parts = text.split(maxsplit=1)
-    if len(parts) < 2 or not parts[1].strip():  # 指令為 "取消訂閱"
+    if len(parts) < 2 or not parts[1].strip():
         try:
-            with db._get_connection() as conn:  # 使用 MS SQL Server 連線
+            with db._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
@@ -334,7 +294,7 @@ def __unsubscribe_equipment(text: str, db, user_id: str) -> TextMessage:
                         "您已訂閱的設備 (點擊取消訂閱或輸入 '取消訂閱 [設備ID]'):\n\n"
                     )
                     response_text_list = ""
-                    for eq_id, name_db, equipment_type in subscriptions[:13]:  # QuickReply上限
+                    for eq_id, name_db, equipment_type in subscriptions[:13]:  # 快速回覆（QuickReply）上限
                         type_name = {
                             "dicer": "切割機"
                         }.get(equipment_type, equipment_type)
@@ -363,10 +323,10 @@ def __unsubscribe_equipment(text: str, db, user_id: str) -> TextMessage:
         except Exception as e:
             logger.error(f"處理取消訂閱列表時發生未知錯誤: {e}")
             reply_message_obj = TextMessage(text="系統忙碌中，請稍候再試。")
-    else:  # 指令為 "取消訂閱 [ID]"
+    else:
         equipment_id_to_unsubscribe = parts[1].strip().upper()
         try:
-            with db._get_connection() as conn:  # 使用 MS SQL Server 連線
+            with db._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     "SELECT name FROM equipment WHERE equipment_id = ?;",
@@ -378,7 +338,6 @@ def __unsubscribe_equipment(text: str, db, user_id: str) -> TextMessage:
                         text=f"查無設備 ID「{equipment_id_to_unsubscribe}」。"
                     )
                 else:
-                    # equipment_name_db = equipment_info[0] # 未使用
                     cursor.execute(
                         "DELETE FROM user_equipment_subscriptions "
                         "WHERE user_id = ? AND equipment_id = ?;",
@@ -428,7 +387,6 @@ def __my_subscriptions(db, user_id: str) -> TextMessage:
                     type_name = {
                         "dicer": "切割機"
                     }.get(equipment_type, equipment_type)
-                    # 這裡原本有status_emoji，但沒有實機所以移除，之後可再改成停機，運作，或保養狀態
                     response_text += (
                         f"- {name_db} ({type_name}, {loc or 'N/A'}), "
                         f"ID: {equipment_id}, 狀態: {status}\n"
@@ -456,9 +414,9 @@ def __equipment_details(text: str, db, user_id: str) -> TextMessage:
 
     equipment_name = parts[1].strip()
 
-    if equipment_name:  # 確保 equipment_name 已被賦值
+    if equipment_name:
         try:
-            with db._get_connection() as conn:  # 使用 MS SQL Server 連線
+            with db._get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     """
@@ -542,7 +500,6 @@ def __equipment_details(text: str, db, user_id: str) -> TextMessage:
                             )
                     else:
                         response_text += "\n目前無未解決的警報。\n"
-                    # 請注意:這裡原本有equipment_operation_logs顯示訂單資訊，但無實體訂單所以刪除
                     reply_message_obj = TextMessage(text=response_text.strip())
         except pyodbc.Error as db_err:
             logger.error(f"取得設備詳情失敗 (MS SQL Server): {db_err}")
@@ -553,34 +510,140 @@ def __equipment_details(text: str, db, user_id: str) -> TextMessage:
         return reply_message_obj
 
 
+def __show_report_menu(text: str, db, user_id: str) -> TextMessage:
+    """步驟 1: 顯示報表週期選擇選單"""
+    quick_reply = QuickReply(
+        items=[
+            QuickReplyItem(action=MessageAction(label="月報", text="report_period:monthly")),
+            QuickReplyItem(action=MessageAction(label="季報", text="report_period:quarterly")),
+            QuickReplyItem(action=MessageAction(label="年報", text="report_period:yearly")),
+        ]
+    )
+    return TextMessage(text="請選擇報表週期：", quick_reply=quick_reply)
+
+
+def __handle_report_period(text: str, db, user_id: str) -> TextMessage:
+    """步驟 2: 顯示報表類型選擇選單"""
+    try:
+        period = text.split(":")[1]
+        period_name = {"monthly": "月報", "quarterly": "季報", "yearly": "年報"}.get(period, period)
+        
+        quick_reply = QuickReply(
+            items=[
+                QuickReplyItem(action=MessageAction(label="營運總覽", text=f"report_gen:{period}:operational")),
+                QuickReplyItem(action=MessageAction(label="異常分項", text=f"report_gen:{period}:abnormal")),
+            ]
+        )
+        return TextMessage(text=f"您選擇了【{period_name}】，請選擇報表類型：", quick_reply=quick_reply)
+    except IndexError:
+        return TextMessage(text="報表週期選擇錯誤，請重新開始。")
+
+
+def __handle_report_generation(text: str, db, user_id: str) -> TextMessage:
+    """步驟 3: 產生並顯示報表"""
+    try:
+        parts = text.split(":")
+        period = parts[1]
+        report_type = parts[2]
+        
+        table_suffix = period
+        
+        with db._get_connection() as conn:
+            cursor = conn.cursor()
+            
+            if report_type == "operational":
+                table_name = f"stats_operational_{table_suffix}"
+                order_by = "year DESC"
+                if period == "monthly": order_by += ", month DESC"
+                elif period == "quarterly": order_by += ", quarter DESC"
+                
+                sql = f"""
+                    SELECT TOP 1 * FROM {table_name}
+                    ORDER BY {order_by};
+                """
+                cursor.execute(sql)
+                row = cursor.fetchone()
+                
+                if not row:
+                    return TextMessage(text="目前資料庫中尚無相關營運統計資料。")
+
+                cols = [column[0] for column in cursor.description]
+                row_dict = dict(zip(cols, row))
+                
+                time_label = f"{row_dict['year']}年"
+                if 'month' in row_dict: time_label += f"{row_dict['month']}月"
+                elif 'quarter' in row_dict: time_label += f"第{row_dict['quarter']}季"
+                
+                msg = (
+                    f"📊 {time_label} 營運總覽 (設備: {row_dict['equipment_id']})\n"
+                    f"━━━━━━━━━━━━━━\n"
+                    f"🏭 總運作時數: {row_dict.get('total_operation_hrs', 0):,} 小時\n"
+                    f"⚠️ 總停機時間: {row_dict.get('downtime_sec', 0):,} 秒\n"
+                    f"📉 停機率: {row_dict.get('downtime_rate_percent', '0')}\n"
+                )
+                return TextMessage(text=msg)
+                
+            elif report_type == "abnormal":
+                table_name = f"stats_abnormal_{table_suffix}"
+                order_by = "year DESC"
+                if period == "monthly": order_by += ", month DESC"
+                elif period == "quarterly": order_by += ", quarter DESC"
+                
+                sql = f"""
+                    SELECT TOP 10 detected_anomaly_type, downtime_sec
+                    FROM {table_name}
+                    WHERE year = (SELECT MAX(year) FROM {table_name})
+                    ORDER BY downtime_sec DESC;
+                """
+                # 注意：SQL 為簡化範例，若需更精準可加上月份/季度條件
+                
+                cursor.execute(sql)
+                rows = cursor.fetchall()
+                
+                if not rows:
+                    return TextMessage(text="目前資料庫中尚無相關異常統計資料。")
+                
+                msg = "📊 最新異常分項統計 (Top 10)\n━━━━━━━━━━━━━━\n"
+                max_val = max([r[1] for r in rows]) if rows else 1
+                
+                for anomaly_type, downtime in rows:
+                    downtime = downtime or 0
+                    bar_len = int((downtime / max_val) * 10)
+                    bar = "█" * bar_len
+                    msg += f"{anomaly_type}:\n{bar} ({downtime:,}s)\n"
+                    
+                return TextMessage(text=msg)
+                
+    except Exception as e:
+        logger.error(f"報表產生失敗: {e}")
+        return TextMessage(text="報表產生失敗，請稍後再試。")
+
+
 __commands = {
     "help": __help, "幫助": __help, "選單": __help, "menu": __help,
     "使用說明": __guide, "說明": __guide, "教學": __guide, "指南": __guide, "guide": __guide,
     "關於": __about, "about": __about,
-    "language": __language, "語言": __language,
     "設備狀態": __equipment_status, "機台狀態": __equipment_status, "equipment status": __equipment_status,
     "我的訂閱": __my_subscriptions, "my subscriptions": __my_subscriptions,
+    "powerbi": __show_report_menu, "查看報表": __show_report_menu, "報表": __show_report_menu,
 }
 
-# Improved regex-like matching using simpler string checks for now, can be upgraded to full regex if needed
 __fuzzy_commands: List[Tuple[Callable[[str], bool], Callable[[str], TextMessage]]] = [
-    (lambda text: text.startswith("language:") or text.startswith("語言:"), __set_language),
     (lambda text: "訂閱設備" in text or "subscribe equipment" in text, __subscribe_equipment),
     (lambda text: "取消訂閱" in text or "unsubscribe" in text, __unsubscribe_equipment),
     (lambda text: "設備詳情" in text or "機台詳情" in text, __equipment_details),
+    (lambda text: text.startswith("report_period:"), __handle_report_period),
+    (lambda text: text.startswith("report_gen:"), __handle_report_generation),
 ]
 
 
 def __get_command(text: str) -> Callable[[str], TextMessage]:
     """根據輸入文字返回對應的命令函數"""
-    # Case-insensitive cleanup
     normalized_text = text.strip().lower()
 
     if normalized_text in __commands:
         return __commands[normalized_text]
 
-    # Check fuzzy commands with original text (some might need it, though we check lower inside lambda usually)
-    # Adjust lambda to check normalized text if consistent
     for condition, command in __fuzzy_commands:
         if condition(normalized_text):
             return command
@@ -593,11 +656,9 @@ def dispatch_command(text: str, db, user_id: str):
     if cmd is None:
         return None
 
-    # A more robust way to dispatch commands by inspecting their signature
     import inspect
     sig = inspect.signature(cmd)
 
-    # Prepare arguments to pass to the command function
     kwargs = {}
     if 'text' in sig.parameters:
         kwargs['text'] = text

@@ -1,4 +1,3 @@
-# src/services/line_service.py
 import os
 import logging
 from linebot.v3.messaging import (
@@ -12,12 +11,10 @@ from linebot.v3.messaging import (
 )
 from linebot.v3.messaging.exceptions import ApiException
 from ..database import db
-from src import reply
 from src.main import reply_message as main_reply_message
 
 logger = logging.getLogger(__name__)
 
-# LINE Bot API setup
 channel_access_token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 if not channel_access_token:
     raise ValueError("LINE_CHANNEL_ACCESS_TOKEN not set")
@@ -49,8 +46,7 @@ def send_multicast_notification(user_ids_to_notify, message_text):
         return True
 
     try:
-        # LINE Multicast 最多支援 500 個使用者 ID
-        # 如果需要發送超過 500 人，應在此處進行分批處理
+        # LINE 多播（Multicast）最多支援 500 個使用者 ID
 
         message_obj = TextMessage(text=message_text)
         multicast_request = MulticastRequest(to=user_ids_to_notify, messages=[message_obj])
@@ -59,8 +55,6 @@ def send_multicast_notification(user_ids_to_notify, message_text):
         return True
     except Exception as e:
         logger.error(f"發送 Multicast 通知失敗: {e}")
-        # 如果 Multicast 失敗，可以考慮退回到逐一發送 (但這會很慢)，
-        # 或者只記錄錯誤。這裡選擇記錄錯誤。
         return False
 
 
@@ -103,27 +97,15 @@ def send_reply_with_fallback(event, message_obj, user_id):
 
 def process_message_in_background(event):
     """在背景處理耗時的訊息回覆"""
-    text = event.message.text.strip()
-    text_lower = text.lower()
     user_id = event.source.user_id
 
-    db.get_user_preference(user_id)
-
-    reply_message_obj = reply.dispatch_command(
-        text_lower, db, user_id
-    )
-    if reply_message_obj is None:
-        try:
-            response_text = main_reply_message(event)
-            reply_message_obj = TextMessage(text=response_text)
-        except ImportError:
-            logger.error("無法導入 src.main.reply_message")
-            reply_message_obj = TextMessage(text="抱歉，AI 對話功能暫時無法使用。")
-        except Exception as e:
-            logger.exception(f"調用 Ollama 回覆訊息失敗: {e}")
-            reply_message_obj = TextMessage(
-                text="抱歉，處理您的請求時發生了錯誤，AI 功能可能暫時無法使用。"
-            )
+    try:
+        reply_message_obj = main_reply_message(event)
+    except Exception as e:
+        logger.exception(f"處理訊息時發生錯誤: {e}")
+        reply_message_obj = TextMessage(
+            text="抱歉，系統發生錯誤，請稍後再試。"
+        )
 
     if reply_message_obj:
         if not send_reply_with_fallback(event, reply_message_obj, user_id):
@@ -131,14 +113,4 @@ def process_message_in_background(event):
                 "回覆訊息與推播皆失敗，使用者 %s，訊息內容型別 %s",
                 user_id,
                 type(reply_message_obj).__name__,
-            )
-    else:
-        logger.info(f"未處理的訊息: {text} from user {user_id}")
-        unknown_command_reply = TextMessage(
-            text="抱歉，我不太明白您的意思。您可以輸入 'help' 查看我能做些什麼。"
-        )
-        if not send_reply_with_fallback(event, unknown_command_reply, user_id):
-            logger.error(
-                "未知命令回覆失敗且推播失敗，使用者 %s",
-                user_id,
             )

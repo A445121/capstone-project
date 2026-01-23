@@ -1,14 +1,13 @@
-# app.py
 import logging
 import os
 import sys
+import secrets
 from flask import Flask
 from flask_talisman import Talisman
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from src.config import Config
 from src.initial_data import import_data_from_excel
-from src.utils import get_or_create_secret_key
 from src.routes import register_blueprints
 from src.linebot_connect import get_handler
 from src.routes.main import set_handler
@@ -17,56 +16,33 @@ logger = logging.getLogger(__name__)
 
 
 def create_app(testing=False):
-    """創建並配置 Flask 應用程序"""
+    """建立並設定 Flask 應用程式"""
     try:
-        # 驗證配置
         try:
             Config.validate()
             logger.info("環境變數驗證成功")
-            
+
         except ValueError as e:
             if not testing:
-                logger.critical("環境變數驗證失敗，程序將終止: %s", e)
+                logger.critical("環境變數驗證失敗，程式將終止: %s", e)
                 sys.exit(1)
             else:
                 logger.warning(f"測試模式: 環境變數驗證失敗，但將繼續執行: {e}")
 
-        # 初始化 Flask 應用
-        app = Flask(
-            __name__,
-            template_folder="templates",
-            static_folder="static"
-        )
+        app = Flask(__name__)
 
-        # 設定密鑰
-        app.secret_key = get_or_create_secret_key()
+        app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(24)
 
-        # 處理代理頭信息
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
 
-        # 安全性設置
         if not testing:
             csp = {
                 "default-src": "'self'",
                 "script-src": [
-                    "'self'",
-                    "https://cdn.powerbi.com",
-                    "'unsafe-inline'",
+                    "'self'"
                 ],
-                "style-src": [
-                    "'self'",
-                    "'unsafe-inline'",
-                ],
-                "img-src": "'self'",
-                "frame-src": [
-                    "https://app.powerbi.com",
-                    "https://cdn.powerbi.com",
-                ],
-                "connect-src": [
-                    "'self'",
-                    "https://api.powerbi.com",
-                    "https://login.microsoftonline.com",
-                ],
+                "style-src": ["'self'"],
+                "img-src": "'self'"
             }
             Talisman(
                 app,
@@ -78,24 +54,21 @@ def create_app(testing=False):
                 feature_policy="geolocation 'none'; microphone 'none'; camera 'none'",
             )
 
-        # 初始化數據
         import_data_from_excel()
 
-        # 註冊路由
         register_blueprints(app)
 
-        # 設定 webhook handler
         handler = get_handler()
         set_handler(handler)
 
         return app
     except Exception as e:
-        logger.critical(f"應用程序初始化失敗: {e}")
+        logger.critical(f"應用程式初始化失敗: {e}")
         raise
 
 
 def run_app(host=None, port=None, debug=None, ssl_context=None):
-    """運行 Flask 應用程序"""
+    """執行 Flask 應用程式"""
     host = host or os.environ.get("HOST", "0.0.0.0")
     port = port or int(os.environ.get("PORT", 443))
     debug = debug or (os.environ.get("FLASK_DEBUG", "False").lower() == "true")
@@ -106,12 +79,11 @@ def run_app(host=None, port=None, debug=None, ssl_context=None):
         )
     except:
         pass
-# 根據是否在反向代理後運行來決定是否使用 SSL
-    logger.info("啟動應用程序，反向代理模式: %s", os.environ.get('Reverse_Proxy', 'true'))
-    logger.info("主機: %s, 端口: %d, 調試模式: %s", host, port, debug)
-    logger.info("SSL 證書: %s, SSL 密鑰: %s", ssl_context[0] if ssl_context else None, ssl_context[1] if ssl_context else None)
+    logger.info("啟動應用程式，反向代理模式: %s", os.environ.get('Reverse_Proxy', 'true'))
+    logger.info("主機: %s, 埠: %d, 除錯模式: %s", host, port, debug)
+    logger.info("SSL 憑證: %s, SSL 密鑰: %s", ssl_context[0] if ssl_context else None, ssl_context[1] if ssl_context else None)
     if os.environ.get('Reverse_Proxy')=='true':
-        logger.info("在反向代理後運行，禁用 SSL")
+        logger.info("在反向代理後執行，停用 SSL")
         app = create_app()
         app.run(host=host, port=port, debug=debug)
     else:

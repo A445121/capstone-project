@@ -2,484 +2,145 @@
 
 ## 概述
 
-本專案整合 [LINE Messaging API](https://developers.line.biz/zh-hant/)、[Ollama](https://ollama.com/) (運行 Llama 3 / gpt-oss:20b 模型) 與半導體設備監控系統，打造一個多功能智能助理。系統可在 LINE 平台上即時提供工程技術支援與諮詢。此外，系統能即時監控半導體設備，自動偵測異常並通過 LINE 機器人發送警報通知。系統包含完整的使用者數據儲存、分析功能以及管理後台，並透過 RAG (Retrieval-Augmented Generation) 技術結合本地知識庫提供更精準的回答。
+本專案以 LINE Bot 作為操作介面，提供設備監控的四大功能：警報發送與解決、設備訂閱、報表查詢與設備狀態查看。  
+系統接收外部設備警報資料並存入 SQL Server，依據訂閱關係推播通知給使用者，並透過 LINE 指令完成查詢與管理。
 
 ## 技術棧
 
-- **Python 3.11**：專案主要開發語言，基於最新穩定版本
-- **Flask**：輕量級後端 Web 框架，處理 API 請求與網頁展示
-- **line-bot-sdk v3.x**：整合 LINE Bot API，處理訊息接收與回覆
-- **Ollama**：本地運行的大型語言模型服務，提供智能對話能力
-- **ChromaDB**：開源向量資料庫，用於儲存 RAG 系統的知識向量
-- **SentenceTransformers**：用於將文本轉換為向量表示 (`paraphrase-multilingual-mpnet-base-v2`)
-- **SQL Server**：關聯式資料庫，儲存對話歷史、使用者偏好與設備數據
-- **Schedule**：簡易任務排程，用於定期設備監控
-- **Flask-Talisman**：實作內容安全政策(CSP)與其他安全防護
-- **Docker**：容器化部署，確保環境一致性
-- **GitHub Actions**：CI/CD 流程自動化與安全掃描
+- **Python 3.11**
+- **Flask**
+- **LINE Bot SDK v3.x**
+- **SQL Server** (pyodbc)
+- **Flask-Talisman**
+- **Pandas / Openpyxl**（初始資料匯入）
 
 ## 主要功能
 
-1. **LINE 訊息處理**  
-   - 利用 `/callback` Webhook 接收並驗證 LINE 傳來的事件
-   - 根據使用者訊息，調用 Ollama API 生成專業回覆
-   - 實作訊息輸入驗證與清理，防止潛在的 XSS 攻擊
-   - 支援快速回覆、按鈕模板等 LINE 互動元素
+1. **警報發送與解決**
+   - 外部設備透過 REST API 發送警報 (`POST /alarms`)
+   - 維修完成後透過 REST API 解決警報 (`POST /resolvealarms`)
+   - 自動推播警報/解決訊息給訂閱者
 
-2. **智能對話生成**
-   - 整合 Ollama 服務，使用 `gpt-oss:20b` 等模型生成邏輯嚴謹的回應
-   - 維護對話歷史紀錄，提供上下文相關的回覆
-   - 支援多語言回覆，包含繁體中文、簡體中文、英文、日文和韓文
-   - **檢索增強生成 (RAG)**：
-     - 使用 `SentenceTransformers` 將使用者問題轉換為向量
-     - 透過 `ChromaDB` 在本地知識庫中檢索相關文件與資料庫記錄
-     - 將檢索到的資訊作為上下文注入模型提示，提升回答準確度
+2. **訂閱設備**
+   - 使用者透過 LINE 指令訂閱/取消訂閱設備
+   - 查詢已訂閱設備清單
 
-4. **半導體設備監控**  
-   - 即時監控各類半導體設備（黏晶機、打線機、切割機）的運作狀態與關鍵指標
-   - 自動偵測設備異常，包括溫度、壓力、轉速、良率等指標超出閾值的情況
-   - 以不同嚴重程度（警告、嚴重、緊急）分類設備異常
-   - 透過 LINE 機器人即時發送警報通知給相關責任人員
-   - 支援排程功能，定期檢查設備狀態（預設每 5 分鐘一次）
-   - 提供設備狀態查詢指令，可查看所有設備概況或特定設備詳情
+3. **查詢報表**
+   - 提供營運總覽與異常分項
+   - 支援月報 / 季報 / 年報
 
-5. **資料儲存與分析**
-   - 使用 SQL Server 資料庫儲存對話歷史、使用者偏好與設備監控數據
-   - 實作完整的分析模組，追蹤用戶行為與系統使用狀況
-   - 生成使用趨勢數據，包括每日訊息量、活躍用戶數等統計
-   - 支援關鍵字追蹤與分析，了解使用者主要關注的話題
-   - 儲存設備運行指標與警報歷史，便於後續分析與改進
-
-6. **管理後台**  
-   - 提供安全的管理員登入系統
-   - 展示系統使用統計，包括總對話數、用戶數等關鍵指標
-   - 查看個別使用者的完整對話歷史
-   - 監控系統狀態，顯示各API連接情況
-   - 查看設備監控概況與異常警報
-
-7. **事件系統**
-   - 實作輕量級事件發布/訂閱系統，解耦模組間的依賴
-   - 允許不同模組響應系統事件，如設備警報、使用者行為等
-   - 提高系統可擴展性與維護性
-   - 支援事件訂閱和發布，遵循發布/訂閱設計模式
-   - 錯誤隔離機制，確保事件處理錯誤不影響整體系統運行
-
-8. **集中式配置管理**
-   - 使用 config.py 統一管理所有環境變數與設定
-   - 實作環境變數驗證機制，確保必要的設定存在
-   - 集中式日誌配置，提供一致的日誌格式與級別
-   - 支援嚴格模式與寬鬆模式的環境驗證策略
-
-9. **應用程序生命週期管理**
-   - 新增 app.py 作為統一應用程序創建與配置入口
-   - 優雅的啟動與關閉流程，確保資源正確釋放
-   - 適當的錯誤處理與日誌記錄
-   - 內容安全政策(CSP)配置與 HTTPS 強制實施
+4. **查看設備狀態**
+   - 設備狀態摘要（依設備類型統計）
+   - 設備詳情（最新指標、未解決警報）
 
 ## 專案架構
 
 ```
 .
 ├── app.py                      # Flask 應用程式進入點
-├── src/                          # 主要源碼
-│   ├── __init__.py               # Python 包初始化
-│   ├── routes/                   # 路由模組 (Blueprints)
-│   ├── services/                 # 業務邏輯模組
-│   ├── utils.py                  # 工具函數
-│   ├── config.py                 # 集中式配置管理
-│   ├── main.py                   # 核心邏輯與 Ollama 服務
-│   ├── rag.py                    # RAG 系統核心 (ChromaDB)
-│   ├── linebot_connect.py        # LINE Bot 事件處理
-│   ├── database.py               # 資料庫操作
-│   ├── analytics.py              # 數據分析模組
-│   ├── equipment_monitor.py      # 設備監控與異常偵測
-│   ├── equipment_scheduler.py    # 設備監控排程器
-│   ├── event_system.py           # 事件發布/訂閱系統
-│   └── initial_data.py           # 初始資料生成
-├── rag_db/                       # 向量資料庫儲存位置
-├── templates/                    # HTML 模板
-├── .github/
-│   └── workflows/
-│       └── main.yml              # GitHub Actions CI/CD 設定檔
-├── .env.example                  # 環境變數範例檔案
-├── requirements.txt              # Python 套件相依列表
-├── Dockerfile                    # Docker 部署設定檔
-├── README.md                     # 專案簡介與快速上手指南
-├── Documentary.md                # 專案詳細文件（本文件）
-└── .gitignore                    # 忽略檔案清單
+├── src/
+│   ├── routes/
+│   │   ├── alarm.py            # 警報 API
+│   │   └── main.py             # LINE webhook
+│   ├── services/
+│   │   └── line_service.py     # LINE 推播/回覆
+│   ├── config.py               # 環境變數設定
+│   ├── database.py             # 資料庫操作
+│   ├── initial_data.py         # Excel 初始資料匯入
+│   ├── linebot_connect.py      # LINE 事件處理
+│   └── reply.py                # LINE 指令回覆
+├── tool/
+│   ├── send_alarm.py
+│   └── resolve_alarm.py
+├── requirements.txt
+└── README.md
 ```
 
 ## 環境設定
 
-請依照以下步驟配置執行環境，確保各模組順利運作：
+建立 `.env` 檔案並設定以下環境變數：
 
-1. **環境變數設定**  
-   依照 `.env.example` 建立 `.env` 檔案，設定下列必要環境變數：
-   - **Ollama (AI 模型) 相關：**
-     - `OLLAMA_HOST`：Ollama 服務主機 IP (預設 127.0.0.1)
-     - `OLLAMA_PORT`：Ollama 服務埠號 (預設 11434)
-     - `OLLAMA_MODEL`：使用的模型名稱 (預設 gpt-oss:20b)
-     - `OLLAMA_TIMEOUT`：API 請求超時時間
-   - **LINE Bot 相關：**
-     - `LINE_CHANNEL_ACCESS_TOKEN`：LINE Bot 存取金鑰
-     - `LINE_CHANNEL_SECRET`：LINE Bot 密鑰
-   - **應用程式設定：**
-     - `FLASK_DEBUG`：是否啟用 Flask 除錯模式（建議生產環境設為 False）
-     - `PORT`：應用程式監聽的埠號（預設 5000）
-     - `VALIDATION_MODE`：設定為 'strict' 或 'loose'，決定環境變數驗證失敗時的行為
-   - **管理後台設定：**
-     - `ADMIN_USERNAME`：管理員帳號
-     - `ADMIN_PASSWORD`：管理員密碼
-     - `SECRET_KEY`：Flask session 密鑰，用於管理員登入
-   - **資料庫設定：**
-     - `DB_SERVER`：資料庫伺服器位址 (預設 localhost)
-     - `DB_NAME`：資料庫名稱 (預設 Project)
-     - `DB_USER` / `DB_PASSWORD`：需要帳號密碼時填寫
-     - `DB_ODBC_DRIVER`：ODBC 驅動名稱 (預設 `ODBC Driver 17 for SQL Server`，若系統安裝 msodbcsql18 請設定為 `ODBC Driver 18 for SQL Server`)
+```
+# 一般設定
+FLASK_DEBUG=False
+PORT=5000
+SECRET_KEY=your_secret_key
+VALIDATION_MODE=strict
+Reverse_Proxy=
+SSL_CERT_PATH=certs/cert.pem
+SSL_KEY_PATH=certs/key.pem
 
-### RAG 相關設定
+# LINE Bot API
+LINE_CHANNEL_ACCESS_TOKEN=your_line_channel_access_token
+LINE_CHANNEL_SECRET=your_line_channel_secret
 
-- `ENABLE_RAG`：是否啟用 RAG 功能
-- `ENABLE_RAG_DB`：是否將資料庫內容同步至知識庫 (預設 true)
-- `RAG_SOURCE_PATHS`：以作業系統的路徑分隔符號分隔，可覆寫預設的知識庫來源
-- `RAG_CHUNK_SIZE`：文件切片大小 (預設 500)
-- `RAG_CHUNK_OVERLAP`：文件切片重疊 (預設 100)
-- `RAG_DB_TOP_K`：檢索時從資料庫返回的記錄數
-- `RAG_TOP_K`：檢索返回的總片段數
-- `RAG_MIN_SCORE`：最低相似度門檻
+# 資料庫設定 (SQL Server)
+DB_SERVER=localhost
+Windows_login=
+DB_NAME=Project
+DB_USER=your_db_user
+DB_PASSWORD=your_db_password
+DB_ODBC_DRIVER=ODBC Driver 17 for SQL Server
+```
 
-2. **安裝依賴套件**
-   執行以下指令安裝所需套件：
-   ```bash
-   pip install -r requirements.txt
-   ```
+## 資料庫結構 (核心資料表)
 
-### CachyOS/Arch 安裝指引（SQL Server ODBC 驅動）
+- **equipment**：設備基本資訊
+- **equipment_metrics**：設備指標資料
+- **alert_history**：警報紀錄
+- **error_logs**：警報事件記錄
+- **user_equipment_subscriptions**：使用者訂閱關係
+- **stats_operational_* / stats_abnormal_***：報表統計
 
-在 CachyOS 或 Arch Linux 上使用 `pyodbc` 連線 SQL Server 時，需先安裝編譯環境與 ODBC 前置套件，並確保 Microsoft ODBC Driver 已註冊：
+## 啟動與使用
 
-1. 安裝基本工具與 ODBC 核心套件：
-   ```bash
-   sudo pacman -Syu --needed base-devel unixodbc
-   ```
+### 安裝套件
 
-2. 取得 Microsoft ODBC Driver（擇一）：
-   - **AUR**：使用 AUR 助手安裝對應版本驅動與工具。
-     ```bash
-     # 例如使用 yay
-     yay -S msodbcsql17 mssql-tools
-     # 或使用最新的 msodbcsql18
-     yay -S msodbcsql18 mssql-tools
-     ```
-   - **官方套件**：若已設定 Microsoft 的軟體來源，可直接安裝對應套件。
-     ```bash
-     sudo pacman -Syu msodbcsql18 mssql-tools
-     ```
-     （若未設定來源，可參考 Microsoft 官方文件新增簽章金鑰與套件庫，再執行安裝。）
+```bash
+pip install -r requirements.txt
+```
 
-3. 驗證驅動是否註冊：
-   ```bash
-   odbcinst -q -d
-   ```
-   輸出中應能看到 `ODBC Driver 17 for SQL Server` 或 `ODBC Driver 18 for SQL Server`。
+### 啟動服務
 
-4. 常見錯誤排解：
-   - **`Data source name not found, and no default driver specified`**：通常表示驅動未註冊或名稱不符，確認 `/etc/odbcinst.ini` 是否存在對應的 `ODBC Driver 17/18 for SQL Server` 條目。
-   - **架構不符或找不到共享物件**：確認系統為 64 位元，並檢查 `Driver` 指向的 `libmsodbcsql-17.X.so` 或 `libmsodbcsql-18.X.so` 路徑是否存在。
-   - **`pyodbc` 無法偵測到驅動**：在完成安裝與註冊後，可執行
-     ```bash
-     python - <<'PY'
-     import pyodbc
-     print(pyodbc.drivers())
-     PY
-     ```
-     驗證驅動是否出現在列表中。
+```bash
+python app.py
+```
 
-## 執行應用
+### LINE 指令一覽
 
-1. **本地執行**  
-   啟動 Flask 應用：
-   ```bash
-   python app.py
-   ```
-   - LINE Webhook 接收端點為 `/callback`
-   - 服務狀態頁面：`https://localhost:5000/`
-   - 管理後台登入頁面：`https://localhost:5000/admin/login`
+- **help / 幫助 / 選單**：顯示功能選單  
+- **使用說明 / 指南**：顯示使用說明  
+- **查看報表 / 報表**：查詢報表  
+- **訂閱設備**：查看可訂閱設備並訂閱  
+- **取消訂閱 [設備ID]**：取消訂閱  
+- **我的訂閱**：查看已訂閱設備  
+- **設備狀態 / 機台狀態**：查看設備狀態摘要  
+- **設備詳情 [設備名稱或ID]**：查看設備詳情  
 
-   注意：本地執行時默認使用自簽 SSL 證書，以符合 LINE Bot 對 HTTPS 的要求。
+### 警報 API
 
-2. **Docker 部署**  
-   使用 Docker 部署，確保環境一致性：
-   ```bash
-   docker build -t capstone-project .
-   docker run -p 5000:5000 \
-     -e OLLAMA_HOST="120.105.18.33" \
-     -e LINE_CHANNEL_ACCESS_TOKEN="your_line_access_token" \
-     -e LINE_CHANNEL_SECRET="your_line_channel_secret" \
-     -e ADMIN_USERNAME="your_admin_username" \
-     -e ADMIN_PASSWORD="your_admin_password" \
-     -e SECRET_KEY="your_secret_key" \
-     capstone-project
-   ```
+- **送出警報**：`POST /alarms`
+  - 必填：`equipment_id`、`detected_anomaly_type`、`severity_level`
+  - 可選：`rpm`、`deformation_mm`
 
-   Docker 映像檔採用官方 Python 3.11-slim 為基礎，並實作以下安全最佳實踐：
-   - 使用非 root 用戶運行應用程式
-   - 移除不必要的套件以減少攻擊面
-   - 適當設定檔案權限
-
-
-## CI/CD
-
-1. **持續整合與部署**  
-   GitHub Actions 自動化流程包含以下階段：
-
-   a. **安全性掃描**
-   - Bandit：掃描 Python 程式碼中的安全漏洞
-   - Safety：檢查相依套件中的已知漏洞
-
-   b. **測試階段**
-   - 執行 flake8 程式碼品質檢查
-   - 執行 pytest 單元測試與覆蓋率分析
-   - 上傳測試覆蓋率報告至 Codecov
-
-   c. **建置與部署**
-   - 使用 Docker Buildx 建置最佳化的容器映像檔
-   - 使用 Trivy 掃描映像檔中的安全漏洞
-   - 推送映像檔至 Docker Hub
-   - 實作映像檔快取以加速建置流程
-
-   d. **部署後安全掃描**
-   - 使用 Trivy 掃描容器映像檔中的漏洞
-   - 將掃描結果上傳至 GitHub Security
-
-## 使用指南
-
-### LINE Bot 功能
-以下是 LINE Bot 支援的主要命令與功能：
-
-- **一般對話**：直接輸入問題，AI 將生成回應
-- **設備狀態查詢**：輸入「設備狀態」或「機台狀態」查看所有設備的概況
-- **設備詳情查詢**：輸入「設備詳情 [設備名稱]」（例如「設備詳情 黏晶機A1」）查看特定設備的詳細資訊
-- **訂閱設備**：輸入「訂閱設備」查看可訂閱的設備列表，或「訂閱設備 [設備ID]」訂閱特定設備
-- **取消訂閱**：輸入「取消訂閱 [設備ID]」取消訂閱特定設備
-- **我的訂閱**：輸入「我的訂閱」查看已訂閱的設備清單
-- **語言設定**：輸入「language:語言代碼」更改語言（例如「language:en」切換至英文）
-- **幫助選單**：輸入「help」或「幫助」查看功能選單
-- **使用說明**：輸入「使用說明」或「指南」獲取詳細使用方法
-- **關於**：輸入「關於」或「about」查看系統簡介
-
-### 管理後台
-管理後台提供以下功能：
-
-- **儀表板**：顯示系統使用統計，包括總訊息數、用戶數、過去24小時活動等
-- **系統狀態**：監控 Ollama 服務、LINE Bot API 與 RAG 系統的連接狀態
-- **近期對話**：查看最近活躍的用戶及其對話摘要
-- **對話記錄**：查看特定用戶的完整對話歷史
-- **設備監控概況**：提供設備監控的總體視圖，包括警告與嚴重問題
-
-訪問流程：
-1. 訪問 `/admin/login` 路徑
-2. 使用設定的管理員帳號密碼登入
-3. 登入後可查看儀表板與系統統計資料
-4. 點擊「查看對話」可檢視特定用戶的完整對話歷史
-
-## 半導體設備監控功能
-
-本系統包含完整的半導體設備監控功能，能夠自動偵測異常並及時通知相關人員：
-
-1. **支援設備類型**
-   - **黏晶機 (Die Bonder)**：監控溫度、壓力、Pick準確率、良率等指標
-   - **打線機 (Wire Bonder)**：監控溫度、壓力、金絲張力、良率等指標
-   - **切割機 (Dicer)**：監控溫度、轉速、冷卻水溫、切割精度、良率等指標
-
-2. **監控機制**
-   - 使用背景執行緒定期檢查（預設每 5 分鐘）設備狀態
-   - 自動比較當前指標值與設定的閾值（最小值、最大值）
-   - 根據偏差程度決定警報嚴重性（警告、嚴重、緊急）
-   - 偵測長時間運行的作業，避免設備過度使用
-
-3. **警報機制**
-   - 針對不同嚴重程度的異常使用不同的視覺標識（⚠️🔴🚨）
-   - 自動發送 LINE 通知給設備負責人或區域管理員
-   - 記錄所有警報至資料庫，便於後續追蹤與分析
-   - AI 增強的異常描述，提供可能的原因和建議解決方案
-
-4. **使用者訂閱機制**
-   - 使用者可訂閱特定設備的警報通知
-   - 可設定接收通知的層級（例如只接收嚴重與緊急警報）
-   - 根據使用者負責區域自動分配通知
-
-5. **查詢指令**
-   - **設備狀態**：顯示所有設備的狀態摘要，包括總數、正常數量、異常數量等
-   - **設備詳情 [設備名稱]**：顯示特定設備的詳細資訊，包括最新監測指標、未解決警報、目前運行作業等
-
-6. **資料庫結構**
-   - **equipment**：儲存設備基本資訊（ID、名稱、類型、位置等）
-   - **equipment_metrics**：儲存設備監測指標（類型、值、閾值等）
-   - **equipment_operation_logs**：儲存設備運轉記錄（開始時間、結束時間、批次號等）
-   - **alert_history**：儲存警報歷史（警報類型、嚴重程度、狀態等）
-   - **user_equipment_subscriptions**：儲存使用者設備訂閱關係
-
-7. **整合 AI 分析**
-   - 使用 Ollama 分析異常情況，生成對應的解釋與建議
-   - 根據設備特性提供專業的建議，協助技術人員快速解決問題
-
-## 事件系統
-
-事件系統提供以下功能：
-
-1. **模組解耦**
-   - 透過發布/訂閱模式解耦各模組間的直接依賴
-   - 允許不同模組對相同事件進行響應，無需修改發送端代碼
-   - 提高代碼可維護性與系統可擴展性
-
-2. **主要事件類型**
-   - **設備警報事件**：當設備狀態異常時觸發
-   - **使用者互動事件**：記錄使用者的重要操作
-   - **系統狀態事件**：監控系統各組件的運行狀態
-   - **API 回應事件**：追蹤 API 調用結果
-
-3. **使用方式**
-   - 透過 `event_system.subscribe()` 註冊事件處理函數
-   - 使用 `event_system.publish()` 發布事件到系統
-   - 支援任意數量的事件處理器註冊與解除
-
-4. **錯誤處理**
-   - 事件處理中的錯誤不會影響整個系統運行
-   - 所有事件處理錯誤會被記錄到日誌中
-   - 錯誤隔離確保一個處理器失敗不影響其他處理器
-
-## 集中式應用程序管理
-
-新增的集中式應用程序管理功能提供以下優勢：
-
-1. **統一入口點**
-   - 使用 app.py 作為統一的應用程序創建與配置入口
-   - 提供 `create_app()` 工廠函數，便於測試和多實例部署
-   - 支援不同環境的配置獨立管理
-
-2. **環境變數驗證**
-   - 在應用程序啟動時驗證必要的環境變數
-   - 支援嚴格模式（缺少變數時終止程序）和寬鬆模式（僅發出警告）
-   - 測試環境下的特殊處理邏輯
-
-3. **安全性增強**
-   - 集中配置 Flask-Talisman 內容安全政策
-   - 強制 HTTPS 連接，提高傳輸安全性
-   - 自動處理安全相關的 HTTP 標頭
-
-4. **優雅的生命週期管理**
-   - 註冊應用程序關閉處理函數，確保資源正確釋放
-   - 透過統一的 run_app 函數簡化應用程序啟動流程
-   - 測試環境與生產環境的區分處理
-
-## 資料分析功能
-
-系統包含完整的資料分析模組，用於追蹤與分析使用者行為：
-
-1. **事件追蹤**
-   - 記錄各種系統事件，如訊息發送、報表查看、語言變更等
-   - 支援使用者 ID 關聯，便於分析個別使用者行為
-
-2. **每日統計**
-   - 生成每日使用統計，包括訊息總數、獨立使用者數、平均回應時間等
-   - 支援數據匯出，便於進一步分析與報表生成
-
-3. **關鍵字分析**
-   - 追蹤使用者訊息中的關鍵字，分析熱門話題與使用趨勢
-   - 提供最常使用關鍵字的排行統計
-
-4. **使用趨勢**
-   - 生成使用趨勢數據，展示系統使用隨時間的變化
-   - 分析用戶活躍度與留存率
-
-5. **語言偏好分析**
-   - 追蹤使用者的語言偏好設定
-   - 分析不同語言使用者的分佈與行為差異
-
-6. **設備監控分析**
-   - 分析設備異常發生的頻率與模式
-   - 追蹤各類指標的變化趨勢，預測可能的問題
-   - 評估警報系統的有效性與準確度
+- **解決警報**：`POST /resolvealarms`
+  - 必填：`equipment_id`、`resolved_by`
+  - 可選：`error_id`、`detected_anomaly_type`、`resolution_notes`
+  - 若未提供 `error_id`，系統會以 `equipment_id` 找到最新未解決警報並解決
 
 ## 安全性考量
 
-本專案實作多層次的安全防護機制：
+- LINE webhook 簽名驗證
+- 敏感資訊透過環境變數管理
+- Flask-Talisman 內容安全政策
 
-1. **API 安全**
-   - 所有 API 金鑰與敏感資訊均通過環境變數管理，不直接寫入程式碼
-   - 實作 LINE 簽名驗證，確保請求來源
-   - 不直接暴露 AI 服務連接埠，而是透過後端代理轉發
+## 常見問題
 
-2. **網頁安全**
-   - 使用 Flask-Talisman 實作嚴格的內容安全政策(CSP)
-   - 設定安全的 Cookie 屬性（HttpOnly, Secure）
-   - 強制使用 HTTPS 連線
-   - 實作基於 IP 的請求速率限制
+1. **LINE 簽名驗證失敗**  
+   檢查 `LINE_CHANNEL_SECRET` 是否正確。
 
-3. **輸入驗證與清理**
-   - 使用 sanitize_input 函數處理使用者輸入，防止潛在的注入攻擊
-   - 對所有 API 參數進行類型與格式驗證
+2. **警報未寫入資料庫**  
+   確認 SQL Server 連線字串與帳號密碼設定。
 
-4. **容器安全**
-   - 使用非 root 用戶運行容器化應用
-   - 移除不必要的套件以減少攻擊面
-   - 最小化容器映像檔大小
-
-5. **管理後台安全**
-   - 實作安全的管理員認證系統
-   - 使用 Flask session 管理登入狀態，設定適當的 Cookie 安全屬性
-   - 管理員路由使用裝飾器進行權限檢查
-
-6. **持續安全監控**
-   - 在 CI/CD 流程中包含自動化安全掃描
-   - 使用 Trivy 檢測容器映像檔中的漏洞
-   - 使用 Bandit 檢測程式碼中的潛在安全問題
-
-7. **密鑰管理**
-   - 集中式 secret_key 管理，確保密鑰一致性
-   - 支援從環境變數或文件讀取密鑰
-   - 自動產生隨機密鑰作為備用方案
-
-## 常見問題與疑難排解
-
-1. **簽名驗證失敗**  
-   - 確認 `LINE_CHANNEL_SECRET` 與 LINE 開發者控制台設定一致
-   - 檢查是否使用了 ngrok 等工具進行本地測試，可能影響 HTTPS 標頭
-
-2. **API 回覆異常**  
-   - 驗證 `OLLAMA_HOST` 連線正常，確認模型 `gpt-oss:20b` 已正確下載 (ollama list)
-   - 查看應用程式日誌中的詳細錯誤訊息
-   - 確認網路連線是否穩定，特別是在容器化環境中
-
-4. **設備監控問題**
-   - 確認資料庫中已正確初始化設備資料表與範例資料
-   - 檢查設備排程器是否已正確啟動（可透過日誌確認）
-   - 測試設備警報功能可使用 tests/test_equipment_alert.py 模擬異常
-
-5. **Docker 部署問題**
-   - 確認已正確設置所有必要的環境變數
-   - 檢查容器日誌以獲取詳細的錯誤訊息
-   - 確認 Docker 主機的網路設定允許容器連接外部服務
-
-6. **資料庫相關問題**
-   - 確認 SQL Server 連線字串設定正確
-   - 檢查資料庫連接錯誤日誌
-   - 如需重置資料庫，可手動清空資料表或重新建立資料庫
-
-7. **管理後台登入問題**
-   - 確認環境變數 `ADMIN_USERNAME`、`ADMIN_PASSWORD` 和 `SECRET_KEY` 已正確設定
-   - 檢查瀏覽器 Cookie 設定，確保未禁用
-   - 若忘記密碼，可通過修改環境變數重新設定
-
-8. **事件系統問題**
-   - 檢查事件訂閱是否正確配置
-   - 確認事件發布時參數名稱與訂閱時的處理函數參數名稱一致
-   - 審查日誌中的事件處理錯誤
-   - 確保不存在循環依賴的情況
-
-9. **應用程序啟動問題**
-   - 確認 PORT 環境變數設定正確
-   - 檢查是否有其他應用程序佔用相同埠號
-   - 如遇 SSL 相關錯誤，確認已安裝 pyOpenSSL 依賴
-   - 非測試環境下啟動失敗可能是缺少必要環境變數，建議使用 VALIDATION_MODE=loose 進行診斷
+3. **無法接收警報通知**  
+   確認使用者已訂閱該設備，並檢查 LINE Token 是否有效。

@@ -1,4 +1,3 @@
-# src/routes/alarm.py
 from flask import request, jsonify
 from . import alarm_bp
 from ..database import db
@@ -14,25 +13,28 @@ def alarms():
     """接收警報訊息"""
     data = request.get_json(force=True, silent=True)
     key = ("equipment_id", "detected_anomaly_type", "severity_level")
-    if data and all(k in data for k in key):
-        data["created_time"] = str(
-            datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        )
-        db.insert_alert_history(log_data=data)
-        equipment_id = data["equipment_id"]
-        subscribers = db.get_subscribed_users(equipment_id)
-        if subscribers:
-            message_text = (
-                f"設備 {equipment_id} 在 {data['created_time']} 時發生 {data['detected_anomaly_type']} 警報，"
-                f"嚴重程度 {data['severity_level']}。"
-            )
-            # 使用 Multicast 一次發送給所有訂閱者
-            send_multicast_notification(subscribers, message_text)
-        else:
-            logger.info(f"No subscribers found for equipment {equipment_id}")
+    if not data or not all(k in data for k in key):
+        return jsonify({"status": "error", "message": "Missing required keys."}), 400
 
-    logger.info("Received JSON from client:", data)
-    return jsonify({"status": "success"}), 200
+    data["created_time"] = str(
+        datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
+    result = db.insert_alert_history(log_data=data)
+    if result and isinstance(result.get("created_time"), datetime.datetime):
+        result["created_time"] = result["created_time"].strftime("%Y-%m-%d %H:%M:%S")
+    equipment_id = data["equipment_id"]
+    subscribers = db.get_subscribed_users(equipment_id)
+    if subscribers:
+        message_text = (
+            f"設備 {equipment_id} 在 {data['created_time']} 時發生 {data['detected_anomaly_type']} 警報，"
+            f"嚴重程度 {data['severity_level']}。"
+        )
+        send_multicast_notification(subscribers, message_text)
+    else:
+        logger.info(f"No subscribers found for equipment {equipment_id}")
+
+    logger.info("Received alert payload: %s", data)
+    return jsonify({"status": "success", "data": result}), 200
 
 
 @alarm_bp.route("/resolvealarms", methods=["POST"])
@@ -42,17 +44,40 @@ def resolve_alarms():
     if not data:
         return jsonify({"status": "error", "message": "No JSON data received."}), 400
 
-    required_keys = ("error_id", "detected_anomaly_type", "equipment_id", "resolved_by")
+    required_keys = ("equipment_id", "resolved_by")
     if not all(k in data for k in required_keys):
         return jsonify({
             "status": "error",
             "message": (
-                "Missing required keys: error_id, detected_anomaly_type, "
-                "equipment_id, resolved_by."
+                "Missing required keys: equipment_id, resolved_by."
             ),
         }), 400
 
     try:
+        if not data.get("error_id"):
+            with db._get_connection() as conn:
+                cursor = conn.cursor()
+                lookup_sql = (
+                    "SELECT TOP 1 error_id, detected_anomaly_type "
+                    "FROM alert_history "
+                    "WHERE equipment_id = ? AND is_resolved = 0"
+                )
+                params = [data["equipment_id"]]
+                if data.get("detected_anomaly_type"):
+                    lookup_sql += " AND detected_anomaly_type = ?"
+                    params.append(data["detected_anomaly_type"])
+                lookup_sql += " ORDER BY created_time DESC;"
+                cursor.execute(lookup_sql, params)
+                row = cursor.fetchone()
+                if not row:
+                    return jsonify({
+                        "status": "error",
+                        "message": "No unresolved alert found for the equipment."
+                    }), 404
+                data["error_id"] = row[0]
+                if not data.get("detected_anomaly_type"):
+                    data["detected_anomaly_type"] = row[1]
+
         db_result = db.resolve_alert_history(log_data=data)
 
         if db_result is None:
@@ -88,7 +113,6 @@ def resolve_alarms():
                     f"在 {resolved_time_from_db.strftime('%Y-%m-%d %H:%M:%S')} 由 {data['resolved_by']} 解決。"
                     f"解決說明: {data.get('resolution_notes') or '無'}"
                 )
-                # 使用 Multicast 一次發送給所有訂閱者
                 send_multicast_notification(subscribers, message_text)
             else:
                 logger.info(f"No subscribers found for equipment {equipment_id}")
