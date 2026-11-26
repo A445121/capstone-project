@@ -70,7 +70,7 @@ SECRET_KEY_FILE=data/secret_key.txt
 VALIDATION_MODE=strict # strict 或 loose，決定環境變數驗證失敗時是否終止程序
 
 # Ollama 設定 (本地 AI 模型)
-OLLAMA_HOST=120.105.18.33
+OLLAMA_HOST=localhost
 OLLAMA_PORT=11434
 OLLAMA_SCHEME=http # 預設 http
 OLLAMA_MODEL=gpt-oss:20b
